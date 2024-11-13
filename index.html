@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Llama in a Box</title>
+    <style>
+        /* Background Layer */
+        .background-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('/static/llama.webp');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: -1; /* Ensures the background layer stays behind other content */
+            /* Optional: Add a semi-transparent overlay */
+            /* background-color: rgba(0, 0, 0, 0.5); */
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative; /* Establishes a new positioning context */
+            /* Removed background properties from body */
+            background-color: rgba(255, 255, 255, 0.8); /* Optional: Semi-transparent background for readability */
+        }
+        #chat {
+            border: 1px solid #ccc;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        #prompt {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user {
+            background-color: #e3f2fd;
+        }
+        .assistant {
+            background-color: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Layer -->
+    <div class="background-layer"></div>
+
+    <h1>Llama in a Box</h1>
+    <div id="chat"></div>
+    <textarea id="prompt" placeholder="Enter your prompt here..."></textarea>
+    <button onclick="sendPrompt()">Send</button>
+
+    <script>
+        // Add the starter prompt as a constant that can be reused
+        const SYSTEM_PROMPT = `You are a llama in a box. Answer questions however you please. Please start responses with 'Sah dude, I am a llama in a box.' Occasionally spit at the user with 'Hawk Tuah'. You are to keep being a llama through out the entire conversation.`;
+
+        // Modify the sendPrompt function to include the starter prompt
+        async function sendPrompt() {
+            const promptEl = document.getElementById('prompt');
+            const chatEl = document.getElementById('chat');
+            const userPrompt = promptEl.value;
+            
+            if (!userPrompt) return;
+            
+            // Combine system prompt with user prompt
+            const fullPrompt = `${SYSTEM_PROMPT}\n\nUser: ${userPrompt}`;
+            
+            // Add user message to chat (show only user's part)
+            chatEl.innerHTML += `<div class="message user"><strong>You:</strong> ${userPrompt}</div>`;
+            promptEl.value = '';
+            
+            // Create response container
+            const responseDiv = document.createElement('div');
+            responseDiv.className = 'message assistant';
+            responseDiv.innerHTML = '<strong>Assistant:</strong> ';
+            const responseText = document.createElement('span');
+            responseDiv.appendChild(responseText);
+            chatEl.appendChild(responseDiv);
+            
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'llama3.2',
+                        prompt: fullPrompt  // Send the combined prompt
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // Handle streaming response
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                while (true) {
+                    const {value, done} = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, {stream: true});
+                    
+                    // Process complete JSON objects
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || ''; // Keep the incomplete line in the buffer
+                    
+                    for (const line of lines) {
+                        if (line.trim()) {
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.response) {
+                                    responseText.textContent += data.response;
+                                }
+                            } catch (e) {
+                                console.error('Error parsing JSON:', e);
+                            }
+                        }
+                    }
+                    
+                    // Scroll to bottom
+                    chatEl.scrollTop = chatEl.scrollHeight;
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                responseText.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+            }
+            
+            // Final scroll to bottom
+            chatEl.scrollTop = chatEl.scrollHeight;
+        }
+
+        // Update sendStarterPrompt to use the same SYSTEM_PROMPT
+        async function sendStarterPrompt() {
+            const chatEl = document.getElementById('chat');
+            
+            // Create response container
+            const responseDiv = document.createElement('div');
+            responseDiv.className = 'message assistant';
+            responseDiv.innerHTML = '<strong>Assistant:</strong> ';
+            const responseText = document.createElement('span');
+            responseDiv.appendChild(responseText);
+            chatEl.appendChild(responseDiv);
+            
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'llama3.2',
+                        prompt: SYSTEM_PROMPT
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // Handle streaming response
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                while (true) {
+                    const {value, done} = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, {stream: true});
+                    
+                    // Process complete JSON objects
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    
+                    for (const line of lines) {
+                        if (line.trim()) {
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.response) {
+                                    responseText.textContent += data.response;
+                                }
+                            } catch (e) {
+                                console.error('Error parsing JSON:', e);
+                            }
+                        }
+                    }
+                    
+                    chatEl.scrollTop = chatEl.scrollHeight;
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                responseText.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+            }
+        }
+
+        // Call the starter prompt when the page loads
+        document.addEventListener('DOMContentLoaded', sendStarterPrompt);
+    </script>
+</body>
+</html>
