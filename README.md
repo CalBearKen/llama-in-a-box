@@ -3,4 +3,4 @@ In case anyone needs a 'Llama in a Box' today, here's  a Docker container runnin
 
 
 #Instructions
-run "python setup.py" and follow the localhost IP address
+run "python setup.py"
